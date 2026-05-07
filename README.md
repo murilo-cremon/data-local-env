@@ -170,7 +170,7 @@ Criados automaticamente ao subir o ambiente:
 
 ## 🗃️ Scripts SQL do PostgreSQL
 
-Coloque seus arquivos `.sql` em `postgres/init/`. Eles são executados **automaticamente e em ordem alfabética** na primeira vez que o container sobe.
+Caso não queira utilizar o banco de dados já populado com o tema previamente gerado, basta excluir os scripts e colocar seus novos arquivos `.sql` em `postgres/init/`. Eles são executados **automaticamente e em ordem alfabética** na primeira vez que o container sobe.
 
 > ⚠️ Os scripts só rodam quando o volume está vazio. Para recriar do zero:
 > ```bash
