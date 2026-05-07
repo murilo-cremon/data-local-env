@@ -16,23 +16,23 @@ O objetivo deste repositório é fornecer uma **infraestrutura base reutilizáve
 └────────┬─────────┘
          │ extração
 ┌────────▼─────────┐
-│     Airflow       │  ← Orquestração dos pipelines
+│     Airflow      │  ← Orquestração dos pipelines
 └────────┬─────────┘
          │ carga
 ┌────────▼─────────┐
-│      MinIO        │  ← Object Storage S3-compatible
-│  landing-zone/    │     arquivos Parquet, CSV, JSON...
-│  processed/       │
-│  curated/         │
+│      MinIO       │  ← Object Storage S3-compatible
+│  landing-zone/   │     arquivos Parquet, CSV, JSON...
+│  processed/      │
+│  curated/        │
 └────────┬─────────┘
          │ transformação
 ┌────────▼──────────┐
-│ DuckDB/MotherDuck  │  ← Data Warehouse (externo, sem Docker)
+│ DuckDB/MotherDuck │  ← Data Warehouse (externo, sem Docker)
 └────────┬──────────┘
          │
-┌────────▼─────────┐
-│       dbt         │  ← Transformações (externo, via pip)
-└──────────────────┘
+┌────────▼─────────┐        ┌──────────────┐
+│       dbt        │        │   Metabase   │  ← Visualização e BI
+└──────────────────┘        └──────────────┘
 ```
 
 ---
@@ -43,11 +43,31 @@ O objetivo deste repositório é fornecer uma **infraestrutura base reutilizáve
 |---|---|---|
 | **postgres-oltp** | Banco relacional simulando um sistema transacional (fonte dos dados) | `5432` |
 | **postgres-airflow** | Banco de metadados interno do Airflow | `5433` |
+| **postgres-metabase** | Banco de metadados interno do Metabase | `5434` |
 | **minio** | Object storage S3-compatible para a landing zone | `9000` (API) / `9001` (Console) |
 | **airflow-webserver** | Interface web para monitorar e acionar DAGs | `8080` |
 | **airflow-scheduler** | Processo que agenda e dispara as DAGs | — |
+| **metabase** | Ferramenta de BI para criação de dashboards e análises | `3000` |
 
 > **DuckDB/MotherDuck** e **dbt** rodam fora do Docker, instalados via `pip` em cada projeto.
+
+---
+
+## 🎸 Banco de Dados OLTP — Rock Store
+
+O `postgres-oltp` é populado automaticamente no momento em que o ambiente sobe, sem nenhuma intervenção manual necessária.
+
+Os scripts da pasta `postgres/init/` criam toda a estrutura e inserem os dados iniciais, simulando um sistema transacional real de uma **rede de lojas de CDs e discos de vinil voltada para o universo do rock** — rock clássico, heavy metal, punk rock, thrash metal, grunge e afins.
+
+O sistema foi modelado para refletir a realidade operacional de um e-commerce com lojas físicas, cobrindo os principais domínios de negócio:
+
+- 🎵 **Catálogo musical** — bandas, álbuns, faixas, gêneros, gravadoras e formatos (CD, vinil, box set, edição limitada)
+- 🏪 **Gestão de lojas** — lojas físicas e canal online, cada uma com seu próprio estoque
+- 📦 **Controle de estoque** — saldo por loja, movimentações de entrada, saída e transferência entre unidades
+- 🛒 **Pedidos e vendas** — clientes, carrinho, pedidos, itens, status e histórico
+- 👤 **Usuários** — clientes, funcionários e perfis de acesso
+
+A modelagem segue os princípios de um banco OLTP normalizado, com chaves primárias, estrangeiras, índices e integridade referencial, sendo a fonte de dados ideal para pipelines de extração, transformação e análise.
 
 ---
 
@@ -61,7 +81,7 @@ data-local-env/
 ├── .gitignore
 ├── README.md
 └── postgres/
-    └── init/             ← scripts SQL executados na inicialização
+    └── init/             ← scripts SQL executados na inicialização para popular banco OLTP
         ├── 01_schema.sql
         └── 02_seed.sql
 ```
@@ -111,9 +131,28 @@ Aguarde a conclusão antes de acessar o Airflow.
 |---|---|---|---|
 | Airflow | http://localhost:8080 | `admin` | `admin` |
 | MinIO Console | http://localhost:9001 | `minio_access_key` | `minio_secret_key` |
+| Metabase | http://localhost:3000 | configurado no primeiro acesso | — |
 | PostgreSQL OLTP | `localhost:5432` | `oltp_user` | `oltp_password` |
 
 > As credenciais acima refletem os valores padrão do `.env.example`. Altere no seu `.env` local.
+
+---
+
+## 📊 Metabase
+
+O Metabase usa um PostgreSQL dedicado para armazenar seus metadados (dashboards, perguntas, usuários), isolado do banco OLTP.
+
+No primeiro acesso em `http://localhost:3000`, o Metabase exibe um wizard de configuração onde você cria o usuário admin e pode já conectar o **postgres-oltp** como fonte de dados:
+
+| Campo | Valor |
+|---|---|
+| Host | `postgres-oltp` |
+| Porta | `5432` |
+| Banco | `oltp_db` |
+| Usuário | `oltp_user` |
+| Senha | `oltp_password` |
+
+> Use o hostname `postgres-oltp` (não `localhost`) pois os serviços se comunicam pela rede interna do Docker.
 
 ---
 
@@ -153,7 +192,7 @@ docker compose down
 docker compose down -v
 
 # Ver logs de um serviço
-docker compose logs -f airflow-scheduler
+docker compose logs -f metabase
 
 # Status dos containers
 docker compose ps

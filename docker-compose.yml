@@ -34,14 +34,14 @@ services:
     container_name: postgres-oltp
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_OLTP_DB}
+      1: ${POSTGRES_OLTP_DB}
       POSTGRES_USER: ${POSTGRES_OLTP_USER}
       POSTGRES_PASSWORD: ${POSTGRES_OLTP_PASSWORD}
     ports:
       - "${POSTGRES_OLTP_PORT}:5432"
     volumes:
       - postgres_oltp_data:/var/lib/postgresql/data
-      - ./postgres/init:/docker-entrypoint-initdb.d   # scripts .sql executados na primeira vez
+      - ./postgres/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "${POSTGRES_OLTP_USER}", "-d", "${POSTGRES_OLTP_DB}"]
       interval: 10s
@@ -67,6 +67,29 @@ services:
       - postgres_airflow_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "${POSTGRES_AIRFLOW_USER}", "-d", "${POSTGRES_AIRFLOW_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - data-network
+
+  # ─────────────────────────────────────────────
+  # PostgreSQL — Backend do Metabase
+  # ─────────────────────────────────────────────
+  postgres-metabase:
+    image: postgres:16
+    container_name: postgres-metabase
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_METABASE_DB}
+      POSTGRES_USER: ${POSTGRES_METABASE_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_METABASE_PASSWORD}
+    ports:
+      - "${POSTGRES_METABASE_PORT}:5432"
+    volumes:
+      - postgres_metabase_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_METABASE_USER}", "-d", "${POSTGRES_METABASE_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -111,6 +134,34 @@ services:
         mc mb --ignore-existing local/curated;
         echo 'Buckets criados com sucesso!';
       "
+    networks:
+      - data-network
+
+  # ─────────────────────────────────────────────
+  # Metabase — Visualização e BI
+  # ─────────────────────────────────────────────
+  metabase:
+    image: metabase/metabase:latest
+    container_name: metabase
+    restart: unless-stopped
+    ports:
+      - "${METABASE_PORT}:3000"
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_HOST: postgres-metabase
+      MB_DB_PORT: 5432
+      MB_DB_DBNAME: ${POSTGRES_METABASE_DB}
+      MB_DB_USER: ${POSTGRES_METABASE_USER}
+      MB_DB_PASS: ${POSTGRES_METABASE_PASSWORD}
+    depends_on:
+      postgres-metabase:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
     networks:
       - data-network
 
@@ -181,6 +232,7 @@ services:
 volumes:
   postgres_oltp_data:
   postgres_airflow_data:
+  postgres_metabase_data:
   minio_data:
 
 networks:
